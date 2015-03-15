@@ -2,5 +2,5 @@ Name: gonzales
 Version: 0.1
 Requires: microhttpd
 Description: A simple HTTP library for ooc
-SourcePath: source
-
+SourcePath: /Users/amos/Dev/ooc/gonzales/source
+Main: gonzales/gonzales
