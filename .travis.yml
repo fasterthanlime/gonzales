@@ -1,12 +1,24 @@
 before_install:
-  - sudo aptitude -y -q install curl make libgc-dev
-  - git clone --depth=1 git://github.com/nddrylliog/rock.git 
+  - sudo apt-get -y -q install curl make libgc-dev curl
+  - git clone --depth=1 git://github.com/fasterthanlime/rock.git 
+  - git clone --depth=1 git://github.com/fasterthanlime/ooc-microhttpd.git 
   - (cd rock && make -s quick-rescue)
   - export PATH=$PATH:$PWD/rock/bin
+  - wget http://ftp.gnu.org/gnu/libmicrohttpd/libmicrohttpd-0.9.39.tar.gz -O - | tar xz
+  - export _PREFIX=$PWD/prefix
+  - mkdir prefix
+  - cd libmicrohttpd-*
+  - ./configure --prefix=$_PREFIX
+  - make install -j4
+  - cd ..
 
 script:
   - export OOC_LIBS=$PWD
+  - export PKG_CONFIG_PATH=$_PREFIX/lib/pkgconfig
+  - export LD_LIBRARY_PATH=../prefix/lib
   - cd samples
-# - mkdir -p travis
-# - rock -v example -o=travis/example && travis/example
+  - mkdir -p travis
+  - rock -v hellobrowser -o=travis/hellobrowser -L../prefix/lib -I../prefix/include
+  - travis/hellobrowser &
+  - curl http://localhost:4141
 
