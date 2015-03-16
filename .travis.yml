@@ -18,7 +18,7 @@ script:
   - export LD_LIBRARY_PATH=../prefix/lib
   - cd samples
   - mkdir -p travis
-  - rock -v hellobrowser -o=travis/hellobrowser -L../prefix/lib -I../prefix/include
-  - travis/hellobrowser &
+  - rock -v hello-browser -o=travis/hello-browser -L../prefix/lib -I../prefix/include
+  - travis/hello-browser &
   - curl http://localhost:4141
 
