@@ -8,7 +8,7 @@ It's optimized for ease of use, not for performance.
 
 ### Authors
 
-  * Amos Wenger <fasterthanlime@gmail.com>
+  * Amos Wenger
   
 ### Links
 
