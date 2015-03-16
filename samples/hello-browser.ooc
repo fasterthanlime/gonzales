@@ -2,10 +2,19 @@
 use gonzales
 import gonzales/gonzales
 
-srv := Server new()
-srv listen(4141, |req|
-    req respond(200, "<html><body>Hello, browser!</body></html>")
-)
+import os/Time
 
-stdin readLine()
+srv := Server new(4141)
+
+served := 0
+while (served < 1) {
+    req := srv poll()
+    if (req) {
+        req respond(200, "<html><body>Hello, browser!</body></html>")
+        served += 1
+    }
+    Time sleepMilli(16)
+}
+
+srv stop()
 
