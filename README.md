@@ -1,6 +1,6 @@
-## gonzales
-
 [![Build Status](https://travis-ci.org/fasterthanlime/gonzales.svg?branch=master)](https://travis-ci.org/fasterthanlime/gonzales)
+
+## gonzales
 
 Gonzales is a simple HTTP library for ooc based on libmicrohttpd
 
