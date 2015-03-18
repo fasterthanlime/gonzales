@@ -158,17 +158,21 @@ Request: class {
         }
     }
 
-    postIterate: func (kind: Int, key: CString,
+    postIterate: func (kind: Int, _key: CString,
         fileName: CString, contentType: CString,
-        transferEncoding: CString, data: CString,
+        transferEncoding: CString, data: Char*,
         offset: UInt64, size: SizeT) -> Int {
 
-        // Sometimes the callback gets called once more in the end
-        // with a zero size and a valid key, so that's fun.
-        if (size > 0) {
-            // TODO: so much, and yet so little time
-            value := String new((data as Char*) + offset, size)
-            postData put(key toString(), value)
+        // TODO: so much, and yet so little time
+        key := _key toString()
+
+        value := String new(data, size) clone()
+
+        if (postData contains?(key)) {
+            prevValue := postData get(key)
+            postData put(key, prevValue + value)
+        } else {
+            postData put(key, value)
         }
 
         MHDRetCode yes
