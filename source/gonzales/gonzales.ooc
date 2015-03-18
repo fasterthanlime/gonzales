@@ -2,13 +2,14 @@
 use microhttpd
 import microhttpd/microhttpd
 
-import structs/ArrayList
+import structs/[ArrayList, HashMap]
 import threading/Thread
 import os/Time
 
 Server: class {
 
     daemon: MHDDaemon
+    pending := ArrayList<Request> new()
     queue := ArrayList<Request> new()
     mutex := Mutex new()
 
@@ -34,31 +35,46 @@ Server: class {
         uploadDataSize: SizeT*,
         conCls: Pointer*) -> Int {
 
-        dummy: Int
-        if (dummy& != conCls@) {
-            // The first time only the headers are valid, do not respond in the first round...
-            conCls@ = dummy&
+        req: Request
+        if (conCls@ == null) {
+            // first time, only the headers are valid, create request but do not respond
+            req = Request new(
+                connection,
+                url toString(),
+                method toString(),
+                _version toString())
+
+            mutex with(||
+                pending add(req)
+            )
+            conCls@ = req
             return MHDRetCode yes
+        } else {
+            req = conCls@ as Request
         }
 
-        data: String = null
-        if (uploadDataSize@ > 0) {
-            data = String new(uploadData, uploadDataSize@)
+        match (req method) {
+            case "GET" =>
+                // all good!
+            case "POST" =>
+                pp := req postProcessor()
+                if (uploadDataSize@) {
+                    pp process(uploadData, uploadDataSize@)
+                    uploadDataSize@ = 0
+                    return MHDRetCode yes
+                } else {
+                    // done parsing
+                    pp destroy()
+                }
         }
-
-        req := Request new(
-            connection,
-            url toString(),
-            method toString(),
-            _version toString(),
-            data)
 
         mutex with(||
             queue add(req)
+            pending remove(req)
         )
 
-        // FIXME:this is terrible, but apart from having an external FD thing,
-        // I don't know what else to do.
+        // FIXME: this is terrible, but I don't know what else to do.
+        // high-performance http server writers, forgive me, for herefore I sin
         processed := false
         while (!processed) {
             Time sleepMilli(5)
@@ -88,10 +104,11 @@ Request: class {
     url: String
     method: String
     _version: String
-    uploadData: String
 
+    postData := HashMap<String, String> new()
+    _postProcessor: MHDPostProcessor
 
-    init: func (=connection, =url, =method, =_version, =uploadData) {
+    init: func (=connection, =url, =method, =_version) {
         // muffin
     }
 
@@ -101,6 +118,30 @@ Request: class {
         ret := connection queueResponse(status, response)
         response destroy()
         connection resume()
+    }
+
+    postProcessor: func () -> MHDPostProcessor {
+        if (!_postProcessor) {
+            _postProcessor = MHDPostProcessor new(connection,
+                256, This postIterate&, this)
+        }
+        _postProcessor
+    }
+
+    postIterate: func (kind: Int, key: CString,
+        fileName: CString, contentType: CString,
+        transferEncoding: CString, data: CString,
+        offset: UInt64, size: SizeT) -> Int {
+
+        // Sometimes the callback gets called once more in the end
+        // with a zero size and a valid key, so that's fun.
+        if (size > 0) {
+            // TODO: so much, and yet so little time
+            value := String new((data as Char*) + offset, size)
+            postData put(key toString(), value)
+        }
+
+        MHDRetCode yes
     }
 
 }
