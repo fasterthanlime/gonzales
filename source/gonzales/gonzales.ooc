@@ -6,6 +6,16 @@ import structs/[ArrayList, HashMap]
 import threading/Thread
 import os/Time
 
+GC_stack_base: cover from struct GC_stack_base {}
+
+GC_allow_register_threads: extern func
+GC_get_stack_base: extern func(GC_stack_base*) -> Int
+GC_register_my_thread: extern func(GC_stack_base*)
+GC_unregister_my_thread: extern func()
+
+// too soon for Boehm's doc's taste, but oh well
+GC_allow_register_threads()
+
 Server: class {
 
     daemon: MHDDaemon
@@ -14,7 +24,7 @@ Server: class {
     mutex := Mutex new()
 
     init: func (port: Int) {
-        flags := MHDFlag selectInternally | MHDFlag suspendResume | MHDFlag debug
+        flags := MHDFlag threadPerConnection | MHDFlag debug
         daemon = MHDDaemon start(
             flags, port,
             null, null,
@@ -35,9 +45,18 @@ Server: class {
         uploadDataSize: SizeT*,
         conCls: Pointer*) -> Int {
 
+        // register thread first
+        base: GC_stack_base
+        GC_get_stack_base(base&)
+        GC_register_my_thread(base&)
+
+        doQueue := false
+
         req: Request
         if (conCls@ == null) {
-            // first time, only the headers are valid, create request but do not respond
+            // first time, only the headers are valid
+
+            // create request but do not respond
             req = Request new(
                 connection,
                 url toString(),
@@ -48,41 +67,46 @@ Server: class {
                 pending add(req)
             )
             conCls@ = req
-            return MHDRetCode yes
         } else {
             req = conCls@ as Request
+
+            match (req method) {
+                case "GET" =>
+                    // all good!
+                    doQueue = true
+                case "POST" =>
+                    if (uploadDataSize@) {
+                        pp := req postProcessor()
+                        pp process(uploadData, uploadDataSize@)
+                        uploadDataSize@ = 0
+                        GC_unregister_my_thread()
+                        return MHDRetCode yes
+                    } else {
+                        // done parsing
+                        req destroyPostProcessor()
+                        doQueue = true
+                    }
+            }
         }
 
-        match (req method) {
-            case "GET" =>
-                // all good!
-            case "POST" =>
-                pp := req postProcessor()
-                if (uploadDataSize@) {
-                    pp process(uploadData, uploadDataSize@)
-                    uploadDataSize@ = 0
-                    return MHDRetCode yes
-                } else {
-                    // done parsing
-                    pp destroy()
-                }
-        }
-
-        mutex with(||
-            queue add(req)
-            pending remove(req)
-        )
-
-        // FIXME: this is terrible, but I don't know what else to do.
-        // high-performance http server writers, forgive me, for herefore I sin
-        processed := false
-        while (!processed) {
-            Time sleepMilli(5)
+        if (doQueue) {
             mutex with(||
-                processed = !(queue contains?(req))
+                queue add(req)
+                pending remove(req)
             )
+
+            // FIXME: this is terrible, but I don't know what else to do.
+            // high-performance http server writers, forgive me, for herefore I sin
+            processed := false
+            while (!processed) {
+                Time sleepMilli(5)
+                mutex with(||
+                    processed = !(queue contains?(req))
+                )
+            }
         }
 
+        GC_unregister_my_thread()
         MHDRetCode yes
     }
 
@@ -117,7 +141,6 @@ Request: class {
             content size, content toCString(), MHDResponseMemoryMode mustCopy)
         ret := connection queueResponse(status, response)
         response destroy()
-        connection resume()
     }
 
     postProcessor: func () -> MHDPostProcessor {
@@ -126,6 +149,13 @@ Request: class {
                 256, This postIterate&, this)
         }
         _postProcessor
+    }
+
+    destroyPostProcessor: func {
+        if (_postProcessor) {
+            _postProcessor destroy()
+            _postProcessor = null
+        }
     }
 
     postIterate: func (kind: Int, key: CString,

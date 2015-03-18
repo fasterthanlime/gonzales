@@ -4,12 +4,20 @@ import gonzales/gonzales
 
 import os/Time
 
-srv := Server new(4141)
+main: func (args: String[]) {
+    srv := Server new(4141)
 
-served := 0
-while (served < 1) {
-    req := srv poll()
-    if (req) {
+    served := 0
+    continuous := (args length > 1)
+
+    "Listening on port 4141" println()
+    while (served < 1 || continuous) {
+        req := srv poll()
+        if (!req) {
+            Time sleepMilli(16)
+            continue
+        }
+
         match (req method) {
             case "GET" =>
                 req respond(200, "<html><body>Hello, browser!</body></html>")
@@ -22,8 +30,7 @@ while (served < 1) {
         }
         served += 1
     }
-    Time sleepMilli(16)
-}
 
-srv stop()
+    srv stop()
+}
 
